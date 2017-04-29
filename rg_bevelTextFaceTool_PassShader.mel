@@ -1,0 +1,402 @@
+//--------------------------------------------------
+// version r2.6.2 - updated to make surface shaders, RGB
+// 07.05.12
+//
+//--------------------------------------------------
+
+global string $selectFacesWin;
+global string $frontFaceToleranceSlider;
+global string $sideFaceToleranceSlider;
+global string $assignShaderCheckBox;
+global string $sel[];
+
+
+//--------------------------------------------------
+// Launch GUI
+//--------------------------------------------------
+global proc selectfacesUI(){
+    global string $selectFacesWin;
+  
+    //int $doesExist = `window -exists $selectFacesWin`;
+    if(`window -exists $selectFacesWin`) {
+        deleteUI $selectFacesWin;
+        windowPref -remove $selectFacesWin;
+    }
+        
+        $selectFacesWin = `window -rtf on
+                        -topLeftCorner 500 1000
+                        -title "BevelTextFaceTool_PassShader"`;
+        addUIWidgets();
+    
+    showWindow $selectFacesWin;
+}
+
+//--------------------------------------------------
+// Adds elements to window
+//--------------------------------------------------
+global proc addUIWidgets(){
+
+	columnLayout;
+		frameLayout -label "Front Faces" -collapsable false -borderStyle "etchedIn" -width 400; 
+			columnLayout;
+				global string $frontFaceToleranceSlider;		
+				$frontFaceToleranceSlider = `floatSliderGrp -columnWidth 1 100
+						-label "Front face tol."
+						-field true
+						-value .01
+						-pre 4
+						-min 0.0 -max .5`;
+			rowLayout -nc 3;         
+			button  -label "Select front faces" -command "selectFacesFrontButton";
+			button  -label "Select front+back faces" -command "selectFacesFrontBackButton";
+			button  -label "Select back faces" -command "selectFacesBackButton";
+			setParent ..;//row
+			setParent ..;//column
+		setParent ..;//frame
+		
+
+		text -label "";
+
+		frameLayout -label "Side & Edge Faces" -collapsable false -borderStyle "etchedIn" -width 400; 
+			columnLayout;
+				global string $sideFaceToleranceSlider;
+				$sideFaceToleranceSlider = `floatSliderGrp -columnWidth 1 100
+						-label "Side face tol."
+						-field true
+						-value .01
+						-pre 4
+						-min 0.0 -max .5`;
+			rowLayout -nc 2;
+				button  -label "Select side faces" -command "selectFacesSideButton";
+				button  -label "Select edge faces" -command "selectFacesEdgeButton";
+			setParent ..;//column
+			setParent ..;//row
+		setParent ..;//frame
+
+		text -label "";
+
+		frameLayout -label "One-click mode" -collapsable false -borderStyle "etchedIn" -width 400; 
+		
+			columnLayout;
+				text -label "Assign new shader to each type front, sides, edge, back";
+				button  -w 300 -label "Super Auto Assign" -command "selectSuperAutoButton";
+				text -label "";
+			setParent ..;//column
+		setParent ..;//frame
+	
+		text -label "";
+	
+		frameLayout -label "Options" -collapsable true -collapse on -borderStyle "etchedIn" -width 400; 
+			columnLayout;
+				global string $frontVectorFFG;
+				$frontVectorFFG = `floatFieldGrp -label "Front Vector (x,y,z)" -numberOfFields 3 -columnWidth3 20 20 20 -value 0 0 1 0 -precision 4`;
+				button -label "Load front vector from selected face" -command "loadFrontVectorButton";
+				button -label "Reset front vector to +Z (default)" -command "resetFrontVectorButton";
+				text -label "";
+				global string $assignShaderCheckBox;
+				$assignShaderCheckBox = `checkBox -label "Auto-assign new shader to faces" -value false`;
+			setParent ..;//column
+		setParent ..;//frame
+
+
+}
+
+
+
+//--------------------------------------------------
+//Button Press actions
+//--------------------------------------------------
+global proc selectFacesFrontButton(){
+    selectFaces("front");
+}   
+global proc selectFacesFrontBackButton(){
+    selectFaces("frontback");
+} 
+global proc selectFacesBackButton(){
+    selectFaces("back");
+} 
+global proc selectFacesSideButton(){
+    selectFaces("side");
+}
+global proc selectFacesEdgeButton(){
+    selectFaces("edge");
+}
+
+global proc loadFrontVectorButton(){
+    global string $frontVectorFFG;
+    //get the selected objects
+    string $sel[] = `ls -selection`;
+    if ( (size($sel)) == 0){
+        print "Select a face for this to work \n";
+        return;
+    }
+    string $faceInfo[] = `polyInfo -fn $sel[0]`;
+    vector $faceNormal = translatePolyInfoNormal ( $faceInfo[0] );
+    print ("faceNormal = " + $faceNormal + "\n");
+    floatFieldGrp -edit -v ($faceNormal.x) ($faceNormal.y) ($faceNormal.z) 0 $frontVectorFFG;
+    
+    global vector $frontFaceNormal;
+    $frontFaceNormal = $faceNormal;
+}
+
+global proc resetFrontVectorButton(){
+    //reset to +Z
+    global string $frontVectorFFG;
+    floatFieldGrp -e -value 0 0 1 0 $frontVectorFFG;
+    //set our global var
+    global vector $frontFaceNormal;
+    $frontFaceNormal = <<0,0,1>>;
+    
+}
+
+
+global proc selectSuperAutoButton(){
+    global string $assignShaderCheckBox; //we need to see this global
+    //get the current value of shader checkbox in order to overide it and set it back when done.
+    int $assignShaderCheckBoxState;
+    $assignShaderCheckBoxState = `checkBox -q -value $assignShaderCheckBox`;
+    //turn on the checkbox
+    checkBox -e -value true $assignShaderCheckBox;
+    //call the selectFaces proc for the different faces
+    global string $sel[];//get access to the global 
+    selectFaces("front");
+    select -replace $sel;
+    selectFaces("back");
+    select -replace $sel;
+    selectFaces("side");
+    select -replace $sel;
+    selectFaces("edge");
+    select -replace $sel;
+    
+    //return the checkbox to how it was
+    checkBox -e -value $assignShaderCheckBoxState $assignShaderCheckBox;
+}
+
+
+//--------------------------------------------------
+// Returns the value of the sliders
+//--------------------------------------------------
+global proc float getFrontFaceToleranceValue(){
+	global string $frontFaceToleranceSlider;
+  
+    float $v = `floatSliderGrp -q -v $frontFaceToleranceSlider`;
+    return $v;
+}  
+
+global proc float getSideFaceToleranceValue(){
+    global string $sideFaceToleranceSlider;
+  
+    float $v = `floatSliderGrp -q -v $sideFaceToleranceSlider`;
+    return $v;
+}  
+
+  
+
+
+//--------------------------------------------------
+//Main action goes on here
+//--------------------------------------------------
+global proc selectFaces(string $whichFaces){
+
+
+    float $faceToleranceValue;
+    float $sideToleranceValue;
+    if ($whichFaces == "front"|| $whichFaces == "back" || $whichFaces == "frontback" ){
+        $faceToleranceValue= `getFrontFaceToleranceValue`;
+        print ("$whichFaces = " + $whichFaces + "\n");
+    } 
+    if ($whichFaces == "side"){
+        $faceToleranceValue = `getSideFaceToleranceValue`;
+        $sideToleranceValue = $faceToleranceValue;
+        print ("$whichFaces = " + $whichFaces + "\n");
+    }
+    if ($whichFaces == "edge"){
+        $faceToleranceValue= `getFrontFaceToleranceValue`;
+        $sideToleranceValue= `getSideFaceToleranceValue`;
+        print ("$whichFaces = " + $whichFaces + "\n");
+    }
+    
+
+//create var to hold faces that we want to select
+    global string $frontFaces[];
+
+//set the front vector from the UI
+
+//get to the ffg
+    global string $frontVectorFFG;
+    print ("$frontVectorFFG = " + $frontVectorFFG + "\n");
+
+//global vector $frontFaceNormal;
+//print ("$frontFaceNormal = " + $frontFaceNormal + "\n");
+
+//copy ffg to components
+    float $f_v1= `floatFieldGrp -q -v1 $frontVectorFFG`;    
+    float $f_v2= `floatFieldGrp -q -v2 $frontVectorFFG`;
+    float $f_v3= `floatFieldGrp -q -v3 $frontVectorFFG`;
+
+    vector $v =  <<$f_v1,$f_v2,$f_v3>>;
+    print ("Updated $v = " + $v + "\n");
+
+    vector $refVectorFront = $v;
+    print ("$refVectorFront = " + $refVectorFront + "\n");
+
+    vector $refVectorBack = -1*($refVectorFront);
+    print ("$refVectorBack = " + $refVectorBack + "\n");
+
+//get the selected objects
+    global string $sel[];
+    $sel = `ls -selection -dag -leaf`;
+    
+    if (size($sel) == 0){
+        print "----Alert!--- Nothing Happened! Select Polygon Mesh for this to work.";
+        return;
+    }    
+    
+    string $currentSel;  //something to hold the currently processing object
+    for ( $currentSel in $sel ){
+	//need to check for for "mesh"
+        if ( `nodeType $currentSel` == "mesh" ) { 
+            ConvertSelectionToFaces; //converts the selection to faces
+            string $selFaces[] = `ls -sl`;//load selected faces into var
+            $selFaces = `filterExpand -sm 34 -ex true $selFaces`; //get rid of maya's component compression
+            int $facesCount = (size($selFaces)); //get the number of faces
+	
+	//Loop through faces and check normal against reference normal
+            int $i;
+            for ($i=0; $i<$facesCount; $i++){
+                int $face = $i;//just to keep things clearer later
+            //get normal for face
+                string $curFace = ( $currentSel + ".f[" + $face + "]" );
+                string $faceInfo[] = `polyInfo -fn $curFace`;
+                vector $faceNormal = translatePolyInfoNormal ( $faceInfo[0] );
+            //check for face we want
+                        
+                if ($whichFaces == "front" ){
+                    if ( angle($faceNormal,$refVectorFront) <= $faceToleranceValue ) { 
+                        int $lastItem = size( $frontFaces );
+                        $frontFaces[ $lastItem ] = $curFace;
+                    }
+                 
+                }else if ( $whichFaces ==  "back") {
+                    if ( angle($faceNormal,$refVectorBack) <= $faceToleranceValue ) { 
+                        int $lastItem = size( $frontFaces );
+                        $frontFaces[ $lastItem ] = $curFace;
+                    }
+                    
+                }else if ($whichFaces == "frontback" ){
+                    if ( (angle($faceNormal,$refVectorFront) <= $faceToleranceValue) || 
+                    (angle($faceNormal,$refVectorBack) <= $faceToleranceValue) ) { //approx .5 degrees to count
+                        int $lastItem = size( $frontFaces );
+                        $frontFaces[ $lastItem ] = $curFace;
+                    }
+                    
+                }else if ($whichFaces == "side" ){
+                    if ( (angle($faceNormal,$refVectorFront) < (deg_to_rad(90) + $faceToleranceValue)) &&
+                     (angle($faceNormal,$refVectorFront) > (deg_to_rad(90) - $faceToleranceValue)) ) {
+                        int $lastItem = size( $frontFaces );
+                        $frontFaces[ $lastItem ] = $curFace;
+                    }
+                }else if ($whichFaces == "edge" ){ //based on not being a frontback (1st pair) or side (second pair)
+                    if (!( (angle($faceNormal,$refVectorFront) <= $faceToleranceValue) || (angle($faceNormal,$refVectorBack) <= $faceToleranceValue) ) && !( (angle($faceNormal,$refVectorFront) < (deg_to_rad(90) + $sideToleranceValue)) && (angle($faceNormal,$refVectorFront) > (deg_to_rad(90) - $sideToleranceValue)) )) { //
+                        int $lastItem = size( $frontFaces );
+                        $frontFaces[ $lastItem ] = $curFace;
+                    }
+
+                } //end if ($whichFaces == "front" )
+            }
+        }
+    }//end forCurSel in Sel
+                
+    select -replace $frontFaces;
+    
+    //if assign shader is selected, then do that
+    global string $assignShaderCheckBox; //access the global var for the cbox
+    if (`checkBox -query -value $assignShaderCheckBox` == true){
+    	assignShaderToSel($whichFaces);
+    }
+
+//empty the variable for next use
+    clear($frontFaces);
+}
+
+//--------------------------------------------------
+//Shaders for faces functions here
+//--------------------------------------------------
+
+global proc assignShaderToSel(string $which){
+
+	global string $frontFaces[];
+	
+	if (size($frontFaces) > 0){
+	
+		string $shader = `shadingNode -asShader surfaceShader`;
+		if ($which == "front"){
+			setAttr ($shader + ".outColor") -type double3 1 0 0 ; //front RED
+			$shader = `rename $shader ("front_" + $shader)`; 
+			}
+		if ($which == "back"){
+			setAttr ($shader + ".outColor") -type double3 1 0 0 ; //back RED
+			$shader = `rename $shader ("back_" + $shader)`; 
+		}
+		if ($which == "frontback"){
+			setAttr ($shader + ".outColor") -type double3 1 0 0 ; //frontback RED
+			$shader = `rename $shader ("front_" + $shader)`; 
+		}
+		if ($which == "side"){
+			setAttr ($shader + ".outColor") -type double3 0 0 1 ; //side BLUE
+			$shader = `rename $shader ("side_" + $shader)`; 
+		}
+		if ($which == "edge"){
+			setAttr ($shader + ".outColor") -type double3 0 1 0 ; //edge GREEN
+			$shader = `rename $shader ("edge_" + $shader)`; 
+		}
+		
+		string $shadingGroup = ($shader + "SG");
+		sets -renderable true -noSurfaceShader true -empty -name $shadingGroup;
+		defaultNavigation -connectToExisting -source $shader -destination $shadingGroup;
+		select -r $frontFaces;
+		sets -e -forceElement $shadingGroup;
+	}
+	
+}
+
+
+
+//Helper proc for getting face normal as vector
+global proc vector translatePolyInfoNormal( string $pin ){
+    vector $normal;
+    float $x;
+    float $y;
+    float $z;
+
+    string $tokens[];
+    int $numTokens = `tokenize $pin " " $tokens`;
+
+  // Make sure we're looking at polyInfo data:
+    if ( ( $numTokens > 3 ) && ( $tokens[0] == "FACE_NORMAL" ) )
+        {
+    // Maya performs data-type conversion here.
+    $x = ($tokens[$numTokens-3]);
+    $y = ($tokens[$numTokens-2]);
+    $z = ($tokens[$numTokens-1]);
+
+    $normal = << $x, $y, $z >>;
+
+    // Normalize it.
+    $normal = `unit $normal`;
+    }
+
+  // Return it.
+    return $normal;
+}
+
+
+
+//--------------------------------------------------
+//show the GUI
+//--------------------------------------------------
+
+global proc rg_bevelTextFaceTool_PassShader(){
+	selectfacesUI();
+}
+
