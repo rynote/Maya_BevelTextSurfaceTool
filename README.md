@@ -1,6 +1,8 @@
 # Maya_BevelTextSurfaceTool
 A little tool to help you select poly surfaces based on their Normal. Easily assign different shaders to bevels and extrusions
 
+Update:
+Moved it here: https://github.com/rynote/rg_Maya_Fun/blob/master/rg_bevelTextFaceTool_PassShader.mel
 
 I dug up this handy tool I created a few years ago.
 It solves the problem of needing to select Face / Bevel / Side for creating cool 3D text with shaders mapped to the different elements.
